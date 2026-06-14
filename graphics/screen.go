@@ -169,6 +169,14 @@ func (s *Screen) SetPixel(x, y int, pix Pixel) error {
 	return nil
 }
 
+func (s *Screen) GetPixel(x, y int) *Pixel {
+	if x < 0 || y < 0 || x >= s.Width || y >= s.Height {
+		return nil
+	}
+
+	return &s.pixels[y*s.Width+x]
+}
+
 func (s *Screen) ClearPixels() error {
 	width, height, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
