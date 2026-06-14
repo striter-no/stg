@@ -75,6 +75,9 @@ type Screen struct {
 
 	buf           strings.Builder
 	cancelContext context.Context
+
+	stdinFd  int
+	oldState *term.State
 }
 
 func NewScreen(bg_pixel Pixel, cancelContext context.Context) (*Screen, error) {
@@ -120,6 +123,25 @@ func (s *Screen) HideCursor() {
 
 func (s *Screen) ShowCursor() {
 	os.Stdout.WriteString(escShowCursor)
+}
+
+func (s *Screen) EnableEcho() {
+	term.Restore(s.stdinFd, s.oldState)
+}
+
+func (s *Screen) DisableEcho() error {
+	s.stdinFd = int(os.Stdin.Fd())
+	oldState, err := term.GetState(s.stdinFd)
+	if err != nil {
+		return err
+	}
+
+	if _, err := term.MakeRaw(s.stdinFd); err != nil {
+		term.Restore(s.stdinFd, oldState)
+	}
+
+	s.oldState = oldState
+	return nil
 }
 
 func (s *Screen) EnterAlt() {
