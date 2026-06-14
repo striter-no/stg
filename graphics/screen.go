@@ -12,7 +12,6 @@ import (
 
 const (
 	escClear = "\033[H"
-	escBgRGB = "\033[48;2;%d;%d;%dm"
 )
 
 const (
@@ -70,35 +69,47 @@ type Screen struct {
 	Width  int
 	Height int
 
-	bg_pixel Pixel
-	pixels   []Pixel
+	bg_pixel   Pixel
+	pixels     []Pixel
+	textPixels []Pixel
 
 	buf           strings.Builder
 	cancelContext context.Context
 }
 
-func NewScreen(bg_pixel Pixel, cancelContext context.Context) (Screen, error) {
+func NewScreen(bg_pixel Pixel, cancelContext context.Context) (*Screen, error) {
 	width, height, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		return Screen{}, err
+		return nil, err
 	}
-
 	width -= 2
 	height -= 1
 
-	out := Screen{
+	if height%2 != 0 {
+		height--
+	}
+
+	termHeight := height
+	logicalHeight := height * 2
+
+	out := &Screen{
 		bg_pixel:      bg_pixel,
 		Width:         width,
-		Height:        height,
+		Height:        logicalHeight,
 		cancelContext: cancelContext,
 	}
 
-	out.buf.Grow(width*height*(len(escBgRGB)+3)*2 + height*2)
-	out.pixels = make([]Pixel, width*height)
-
+	out.pixels = make([]Pixel, width*logicalHeight)
 	for n := range out.pixels {
 		out.pixels[n] = bg_pixel
 	}
+
+	out.textPixels = make([]Pixel, width*termHeight)
+	for n := range out.textPixels {
+		out.textPixels[n] = Pixel{Char: "", R: -1, FR: -1}
+	}
+
+	out.buf.Grow(width * termHeight * 40)
 
 	return out, nil
 }
@@ -122,7 +133,6 @@ func (s *Screen) ExitAlt() {
 func (s *Screen) SetText(tx, ty int, text string, colorPix Pixel) {
 	y_offset := 0
 	x_offset := 0
-
 	for _, c := range text {
 		if c == '\n' {
 			y_offset++
@@ -134,20 +144,13 @@ func (s *Screen) SetText(tx, ty int, text string, colorPix Pixel) {
 		y := ty + y_offset
 		x_offset++
 
-		if x < 0 || x >= s.Width || y < 0 || y >= s.Height {
+		if x < 0 || x >= s.Width || y < 0 || y >= s.Height/2 {
 			continue
 		}
 
-		if colorPix.R != -1 {
-			s.pixels[y*s.Width+x].R = colorPix.R
-			s.pixels[y*s.Width+x].G = colorPix.G
-			s.pixels[y*s.Width+x].B = colorPix.B
-		} else if colorPix.FR != -1 {
-			s.pixels[y*s.Width+x].FR = colorPix.FR
-			s.pixels[y*s.Width+x].FG = colorPix.FG
-			s.pixels[y*s.Width+x].FB = colorPix.FB
-		}
-		s.pixels[y*s.Width+x].Char = string(c)
+		idx := y*s.Width + x
+		s.textPixels[idx] = colorPix
+		s.textPixels[idx].Char = string(c)
 	}
 }
 
@@ -164,7 +167,6 @@ func (s *Screen) SetPixel(x, y int, pix Pixel) error {
 	if x < 0 || y < 0 || x >= s.Width || y >= s.Height {
 		return errors.New("Pixel is out of bounds")
 	}
-
 	s.pixels[y*s.Width+x] = pix
 	return nil
 }
@@ -173,7 +175,6 @@ func (s *Screen) GetPixel(x, y int) *Pixel {
 	if x < 0 || y < 0 || x >= s.Width || y >= s.Height {
 		return nil
 	}
-
 	return &s.pixels[y*s.Width+x]
 }
 
@@ -182,54 +183,81 @@ func (s *Screen) ClearPixels() error {
 	if err != nil {
 		return err
 	}
-
 	width -= 2
 	height -= 1
 
-	s.buf.Reset()
-	s.pixels = make([]Pixel, width*height)
+	if height%2 != 0 {
+		height--
+	}
 
+	s.Width = width
+	s.Height = height * 2
+	termHeight := height
+
+	s.buf.Reset()
+
+	s.pixels = make([]Pixel, s.Width*s.Height)
 	for n := range s.pixels {
 		s.pixels[n] = s.bg_pixel
 	}
 
-	s.Width = width
-	s.Height = height
+	s.textPixels = make([]Pixel, s.Width*termHeight)
+	for n := range s.textPixels {
+		s.textPixels[n] = Pixel{Char: "", R: -1, FR: -1}
+	}
+
 	return nil
 }
 
 func (s *Screen) Blit() {
 	s.buf.Reset()
-
 	var curFR, curFG, curFB = -1, -1, -1
 	var curR, curG, curB = -1, -1, -1
 
-	for y := range s.Height {
-		for x := range s.Width {
-			px := &s.pixels[y*s.Width+x]
+	for y := 0; y < s.Height; y += 2 {
+		for x := 0; x < s.Width; x++ {
+			pxTop := &s.pixels[y*s.Width+x]
+			pxBot := &s.pixels[(y+1)*s.Width+x]
 
-			if px.FR != curFR || px.FG != curFG || px.FB != curFB ||
-				px.R != curR || px.G != curG || px.B != curB {
+			topFR, topFG, topFB := pxTop.FR, pxTop.FG, pxTop.FB
+			if topFR == -1 && pxTop.R != -1 {
+				topFR, topFG, topFB = pxTop.R, pxTop.G, pxTop.B
+			}
+
+			botR, botG, botB := pxBot.R, pxBot.G, pxBot.B
+			if botR == -1 && pxBot.FR != -1 {
+				botR, botG, botB = pxBot.FR, pxBot.FG, pxBot.FB
+			}
+
+			newFR, newFG, newFB := topFR, topFG, topFB
+			newR, newG, newB := botR, botG, botB
+
+			if newFR != curFR || newFG != curFG || newFB != curFB ||
+				newR != curR || newG != curG || newB != curB {
 
 				s.buf.WriteString("\033[0m")
 
-				hasFG := px.FR != -1
-				hasBG := px.R != -1
+				hasFG := newFR != -1
+				hasBG := newR != -1
 
 				if hasFG && hasBG {
 					fmt.Fprintf(&s.buf, "\033[38;2;%d;%d;%d;48;2;%d;%d;%dm",
-						px.FR, px.FG, px.FB, px.R, px.G, px.B)
+						newFR, newFG, newFB, newR, newG, newB)
 				} else if hasFG {
-					fmt.Fprintf(&s.buf, "\033[38;2;%d;%d;%dm", px.FR, px.FG, px.FB)
+					fmt.Fprintf(&s.buf, "\033[38;2;%d;%d;%dm", newFR, newFG, newFB)
 				} else if hasBG {
-					fmt.Fprintf(&s.buf, "\033[48;2;%d;%d;%dm", px.R, px.G, px.B)
+					fmt.Fprintf(&s.buf, "\033[48;2;%d;%d;%dm", newR, newG, newB)
 				}
 
-				curFR, curFG, curFB = px.FR, px.FG, px.FB
-				curR, curG, curB = px.R, px.G, px.B
+				curFR, curFG, curFB = newFR, newFG, newFB
+				curR, curG, curB = newR, newG, newB
 			}
 
-			s.buf.WriteString(px.Char)
+			charToDraw := "▀"
+			if pxTop.Char != " " && pxTop.Char != "" {
+				charToDraw = pxTop.Char
+			}
+			s.buf.WriteString(charToDraw)
 		}
 
 		s.buf.WriteString("\033[0m\n")

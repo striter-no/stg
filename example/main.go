@@ -27,7 +27,7 @@ func main() {
 		s.ExitAlt()
 	}()
 
-	p := NewPerlin(123321)
+	// p := NewPerlin(123321)
 
 	var tick float64
 	for s.IsRunning() {
@@ -37,12 +37,12 @@ func main() {
 
 		for y := range s.Height {
 			for x := range s.Width {
-				v := p.Noise2DNormalized(
-					float64(x)/float64(s.Width)+tick/100,
-					float64(y)/float64(s.Height)+tick/100,
-				)
+				// v := p.Noise2DNormalized(
+				// 	float64(x)/float64(s.Width)+tick/100,
+				// 	float64(y)/float64(s.Height)+tick/100,
+				// )
 
-				s.SetPixel(x, y, NewBGPixel(uint(v*255), uint(v*255), uint(v*255), " "))
+				s.SetPixel(x, y, NewBGPixel(uint(rand.Uint32()%255), uint(rand.Uint32()%255), uint(rand.Uint32()%255), " "))
 			}
 		}
 
