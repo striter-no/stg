@@ -215,56 +215,60 @@ func (s *Screen) Blit() {
 	var curR, curG, curB = -1, -1, -1
 
 	for y := 0; y < s.Height; y += 2 {
+		termY := y / 2
 		for x := 0; x < s.Width; x++ {
-			pxTop := &s.pixels[y*s.Width+x]
-			pxBot := &s.pixels[(y+1)*s.Width+x]
+			txIdx := termY*s.Width + x
+			txPix := s.textPixels[txIdx]
 
-			topFR, topFG, topFB := pxTop.FR, pxTop.FG, pxTop.FB
-			if topFR == -1 && pxTop.R != -1 {
-				topFR, topFG, topFB = pxTop.R, pxTop.G, pxTop.B
-			}
+			if txPix.Char != "" {
+				s.applyColor(txPix.FR, txPix.FG, txPix.FB, txPix.R, txPix.G, txPix.B, &curFR, &curFG, &curFB, &curR, &curG, &curB)
+				s.buf.WriteString(txPix.Char)
+			} else {
+				pxTop := &s.pixels[y*s.Width+x]
+				pxBot := &s.pixels[(y+1)*s.Width+x]
 
-			botR, botG, botB := pxBot.R, pxBot.G, pxBot.B
-			if botR == -1 && pxBot.FR != -1 {
-				botR, botG, botB = pxBot.FR, pxBot.FG, pxBot.FB
-			}
-
-			newFR, newFG, newFB := topFR, topFG, topFB
-			newR, newG, newB := botR, botG, botB
-
-			if newFR != curFR || newFG != curFG || newFB != curFB ||
-				newR != curR || newG != curG || newB != curB {
-
-				s.buf.WriteString("\033[0m")
-
-				hasFG := newFR != -1
-				hasBG := newR != -1
-
-				if hasFG && hasBG {
-					fmt.Fprintf(&s.buf, "\033[38;2;%d;%d;%d;48;2;%d;%d;%dm",
-						newFR, newFG, newFB, newR, newG, newB)
-				} else if hasFG {
-					fmt.Fprintf(&s.buf, "\033[38;2;%d;%d;%dm", newFR, newFG, newFB)
-				} else if hasBG {
-					fmt.Fprintf(&s.buf, "\033[48;2;%d;%d;%dm", newR, newG, newB)
+				topFR, topFG, topFB := pxTop.FR, pxTop.FG, pxTop.FB
+				if topFR == -1 && pxTop.R != -1 {
+					topFR, topFG, topFB = pxTop.R, pxTop.G, pxTop.B
 				}
 
-				curFR, curFG, curFB = newFR, newFG, newFB
-				curR, curG, curB = newR, newG, newB
-			}
+				botR, botG, botB := pxBot.R, pxBot.G, pxBot.B
+				if botR == -1 && pxBot.FR != -1 {
+					botR, botG, botB = pxBot.FR, pxBot.FG, pxBot.FB
+				}
 
-			charToDraw := "▀"
-			if pxTop.Char != " " && pxTop.Char != "" {
-				charToDraw = pxTop.Char
+				s.applyColor(topFR, topFG, topFB, botR, botG, botB, &curFR, &curFG, &curFB, &curR, &curG, &curB)
+
+				charToDraw := "▀"
+				if pxTop.Char != "" {
+					charToDraw = pxTop.Char
+				}
+				s.buf.WriteString(charToDraw)
 			}
-			s.buf.WriteString(charToDraw)
 		}
 
 		s.buf.WriteString("\033[0m\n")
-
 		curFR, curFG, curFB = -1, -1, -1
 		curR, curG, curB = -1, -1, -1
 	}
-
 	os.Stdout.WriteString(escClear + s.buf.String())
+}
+
+func (s *Screen) applyColor(fr, fg, fb, r, g, b int, curFR, curFG, curFB, curR, curG, curB *int) {
+	if fr != *curFR || fg != *curFG || fb != *curFB || r != *curR || g != *curG || b != *curB {
+		s.buf.WriteString("\033[0m")
+		hasFG := fr != -1
+		hasBG := r != -1
+
+		if hasFG && hasBG {
+			fmt.Fprintf(&s.buf, "\033[38;2;%d;%d;%d;48;2;%d;%d;%dm", fr, fg, fb, r, g, b)
+		} else if hasFG {
+			fmt.Fprintf(&s.buf, "\033[38;2;%d;%d;%dm", fr, fg, fb)
+		} else if hasBG {
+			fmt.Fprintf(&s.buf, "\033[48;2;%d;%d;%dm", r, g, b)
+		}
+
+		*curFR, *curFG, *curFB = fr, fg, fb
+		*curR, *curG, *curB = r, g, b
+	}
 }
