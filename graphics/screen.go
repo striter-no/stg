@@ -127,6 +127,7 @@ func (s *Screen) ShowCursor() {
 }
 
 func (s *Screen) EnableEcho() {
+	unix.IoctlSetInt(int(os.Stdin.Fd()), unix.TCFLSH, unix.TCIFLUSH)
 	term.Restore(s.stdinFd, s.oldState)
 }
 
@@ -199,12 +200,6 @@ func (s *Screen) GetPixel(x, y int) *Pixel {
 		return nil
 	}
 	return &s.pixels[y*s.Width+x]
-}
-
-func (s *Screen) FlushInput() {
-	if s.stdinFd != 0 {
-		_ = unix.IoctlSetInt(s.stdinFd, unix.TCFLSH, unix.TCIFLUSH)
-	}
 }
 
 func (s *Screen) ClearPixels() error {
