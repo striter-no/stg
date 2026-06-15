@@ -269,7 +269,7 @@ func (s *Screen) Blit() {
 			}
 		}
 
-		s.buf.WriteString("\033[0m\n")
+		s.buf.WriteString("\033[0m\r\n")
 		curFR, curFG, curFB = -1, -1, -1
 		curR, curG, curB = -1, -1, -1
 	}
