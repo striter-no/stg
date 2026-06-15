@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
@@ -198,6 +199,12 @@ func (s *Screen) GetPixel(x, y int) *Pixel {
 		return nil
 	}
 	return &s.pixels[y*s.Width+x]
+}
+
+func (s *Screen) FlushInput() {
+	if s.stdinFd != 0 {
+		_ = unix.IoctlSetInt(s.stdinFd, unix.TCFLSH, unix.TCIFLUSH)
+	}
 }
 
 func (s *Screen) ClearPixels() error {
