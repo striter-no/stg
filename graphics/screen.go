@@ -218,12 +218,18 @@ func (s *Screen) ClearPixels() error {
 
 	s.buf.Reset()
 
-	s.pixels = make([]Pixel, s.Width*s.Height)
+	if len(s.pixels) != s.Width*s.Height {
+		s.pixels = make([]Pixel, s.Width*s.Height)
+	}
+
 	for n := range s.pixels {
 		s.pixels[n] = s.bg_pixel
 	}
 
-	s.textPixels = make([]Pixel, s.Width*termHeight)
+	if len(s.textPixels) != s.Width*termHeight {
+		s.textPixels = make([]Pixel, s.Width*termHeight)
+	}
+
 	for n := range s.textPixels {
 		s.textPixels[n] = Pixel{Char: "", R: -1, FR: -1}
 	}
