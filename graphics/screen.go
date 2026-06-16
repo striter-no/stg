@@ -3,8 +3,8 @@ package graphics
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -286,16 +286,63 @@ func (s *Screen) Blit() {
 
 func (s *Screen) applyColor(fr, fg, fb, r, g, b int, curFR, curFG, curFB, curR, curG, curB *int) {
 	if fr != *curFR || fg != *curFG || fb != *curFB || r != *curR || g != *curG || b != *curB {
-		s.buf.WriteString("\033[0m")
+		s.buf.Write([]byte("\033[0m"))
+
 		hasFG := fr != -1
 		hasBG := r != -1
 
+		var buf [64]byte
+		n := 0
+
 		if hasFG && hasBG {
-			fmt.Fprintf(&s.buf, "\033[38;2;%d;%d;%d;48;2;%d;%d;%dm", fr, fg, fb, r, g, b)
+			copy(buf[n:], "\033[38;2;")
+			n += 7
+			n += len(strconv.AppendInt(buf[n:n], int64(fr), 10))
+			buf[n] = ';'
+			n++
+			n += len(strconv.AppendInt(buf[n:n], int64(fg), 10))
+			buf[n] = ';'
+			n++
+			n += len(strconv.AppendInt(buf[n:n], int64(fb), 10))
+			copy(buf[n:], ";48;2;")
+			n += 6
+			n += len(strconv.AppendInt(buf[n:n], int64(r), 10))
+			buf[n] = ';'
+			n++
+			n += len(strconv.AppendInt(buf[n:n], int64(g), 10))
+			buf[n] = ';'
+			n++
+			n += len(strconv.AppendInt(buf[n:n], int64(b), 10))
+			buf[n] = 'm'
+			n++
 		} else if hasFG {
-			fmt.Fprintf(&s.buf, "\033[38;2;%d;%d;%dm", fr, fg, fb)
+			copy(buf[n:], "\033[38;2;")
+			n += 7
+			n += len(strconv.AppendInt(buf[n:n], int64(fr), 10))
+			buf[n] = ';'
+			n++
+			n += len(strconv.AppendInt(buf[n:n], int64(fg), 10))
+			buf[n] = ';'
+			n++
+			n += len(strconv.AppendInt(buf[n:n], int64(fb), 10))
+			buf[n] = 'm'
+			n++
 		} else if hasBG {
-			fmt.Fprintf(&s.buf, "\033[48;2;%d;%d;%dm", r, g, b)
+			copy(buf[n:], "\033[48;2;")
+			n += 7
+			n += len(strconv.AppendInt(buf[n:n], int64(r), 10))
+			buf[n] = ';'
+			n++
+			n += len(strconv.AppendInt(buf[n:n], int64(g), 10))
+			buf[n] = ';'
+			n++
+			n += len(strconv.AppendInt(buf[n:n], int64(b), 10))
+			buf[n] = 'm'
+			n++
+		}
+
+		if n > 0 {
+			s.buf.Write(buf[:n])
 		}
 
 		*curFR, *curFG, *curFB = fr, fg, fb
